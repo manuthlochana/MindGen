@@ -39,9 +39,11 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+    const [isMounted, setIsMounted] = useState(false);
 
     // Initialize with data from DB or empty state
     useEffect(() => {
+        setIsMounted(true);
         if (initialData) {
             setNodes(initialData.nodes || []);
             setEdges(initialData.edges || []);
@@ -93,7 +95,7 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
 
             // Monitor Functionality: Zoom to centerNodeId
             if (data.centerNodeId) {
-                // We need to wait for state update to render nodes before we can center? 
+                // We need to wait for state update to render nodes before we can center?
                 // Or we can just center on the coordinates if we have them in data.nodes
                 // If the node is existing, we need to find it.
 
@@ -158,6 +160,10 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
             handleChat();
         }
     };
+
+    if (!isMounted) {
+        return <div className="h-screen flex items-center justify-center bg-gray-50 text-gray-500">Loading Canvas...</div>;
+    }
 
     return (
         <div className="flex h-screen bg-gray-50">
