@@ -162,7 +162,12 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
     };
 
     if (!isMounted) {
-        return <div className="h-screen flex items-center justify-center bg-gray-50 text-gray-500">Loading Canvas...</div>;
+        return (
+            <div className="flex h-screen items-center justify-center bg-gray-50">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                <p className="ml-3 text-gray-600">Loading Canvas...</p>
+            </div>
+        );
     }
 
     return (
