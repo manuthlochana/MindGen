@@ -66,7 +66,7 @@ export default function SignUp() {
                 setError("Account created but failed to sign in. Please try signing in manually.");
                 setLoading(false);
             } else {
-                router.push("/dashboard");
+                router.push("/");
                 router.refresh();
             }
         } catch (error) {
@@ -76,7 +76,7 @@ export default function SignUp() {
     };
 
     const handleGoogleSignIn = () => {
-        signIn("google", { callbackUrl: "/dashboard" });
+        signIn("google", { callbackUrl: "/" });
     };
 
     return (
