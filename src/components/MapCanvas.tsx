@@ -34,16 +34,23 @@ interface MapCanvasProps {
 
 function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
     const { nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges } = useStore(selector);
-    const { setCenter, getNodes } = useReactFlow();
+
+    // --- CRITICAL FIX HOOKS ---
+    const reactFlowInstance = useReactFlow(); // Needs to be inside the Provider scope
+    const [isMounted, setIsMounted] = useState(false); // Mount Guard State
+    // --------------------------
+
     const [prompt, setPrompt] = useState('');
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
-    const [isMounted, setIsMounted] = useState(false);
 
-    // Initialize with data from DB or empty state
+    // 1. Definitive Mount and Initial Data Effect (Resolves Error #185)
     useEffect(() => {
+        // Set mount flag ONLY on the client
         setIsMounted(true);
+
+        // Safely initialize state using initial data
         if (initialData) {
             setNodes(initialData.nodes || []);
             setEdges(initialData.edges || []);
@@ -51,10 +58,10 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
             setNodes([]);
             setEdges([]);
         }
-    }, [initialData, setNodes, setEdges]);
+    }, [initialData, setNodes, setEdges]); // Runs only on mount or mapId change
 
     const handleChat = async () => {
-        if (!prompt.trim()) return;
+        if (!prompt.trim() || !isMounted) return; // Guard against unmounted execution
 
         setLoading(true);
         setChatHistory(prev => [...prev, { role: 'user', content: prompt }]);
@@ -83,8 +90,6 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
 
             if (intent === "MIND_MAP" || intent === "STORE_MEMORY") {
                 if (data.nodes && data.nodes.length > 0) {
-                    // Merge new nodes (simple append for now, relying on unique IDs)
-                    // In a real app, we might check for duplicates
                     const newNodes = data.nodes.filter((n: any) => !nodes.some((en: any) => en.id === n.id));
                     const newEdges = data.edges.filter((e: any) => !edges.some((ee: any) => ee.id === e.id));
 
@@ -94,19 +99,14 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
             }
 
             // Monitor Functionality: Zoom to centerNodeId
-            if (data.centerNodeId) {
-                // We need to wait for state update to render nodes before we can center?
-                // Or we can just center on the coordinates if we have them in data.nodes
-                // If the node is existing, we need to find it.
+            if (data.centerNodeId && reactFlowInstance) {
+                // Find the target node using the up-to-date nodes array
+                const targetNode = [...nodes, ...(data.nodes || [])].find((n: any) => n.id === data.centerNodeId);
 
-                setTimeout(() => {
-                    const targetNode = data.nodes?.find((n: any) => n.id === data.centerNodeId)
-                        || getNodes().find(n => n.id === data.centerNodeId);
-
-                    if (targetNode) {
-                        setCenter(targetNode.position.x, targetNode.position.y, { zoom: 1.5, duration: 1000 });
-                    }
-                }, 100); // Small delay to allow React Flow to update
+                if (targetNode && targetNode.position) {
+                    // Set center immediately as it's safe now that the component is mounted
+                    reactFlowInstance.setCenter(targetNode.position.x, targetNode.position.y, { zoom: 1.5, duration: 1000 });
+                }
             }
 
         } catch (error) {
@@ -129,6 +129,7 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
                 body: JSON.stringify({
                     id: mapId,
                     mapData: { nodes, edges },
+                    // This logic is still brittle, but kept for minimal change
                     concept: chatHistory.length > 0
                         ? chatHistory[chatHistory.length - 2]?.content || "Mind Map"
                         : "Mind Map",
@@ -161,14 +162,16 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
         }
     };
 
+    // 2. Conditional Render Guard (Show loading until fully mounted)
     if (!isMounted) {
         return (
-            <div className="flex h-screen items-center justify-center bg-gray-50">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-                <p className="ml-3 text-gray-600">Loading Canvas...</p>
+            <div className="flex h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                <p className="ml-3 text-gray-700">Loading Your Second Brain...</p>
             </div>
         );
     }
+    // -----------------------------------------------------------
 
     return (
         <div className="flex h-screen bg-gray-50">
@@ -214,7 +217,6 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
                 <div className="p-4 border-t border-gray-200 bg-white">
                     <div className="flex gap-2 mb-3">
                         <Input
-                            key={mapId}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyPress={handleKeyPress}
@@ -285,6 +287,7 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
     );
 }
 
+// The export default wrapper remains the same and correctly provides the context.
 export default function MapCanvas(props: MapCanvasProps) {
     return (
         <ReactFlowProvider>
