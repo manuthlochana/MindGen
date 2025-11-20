@@ -33,26 +33,24 @@ interface MapCanvasProps {
 }
 
 function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
-    // These selectors return state and state setters from Zustand
+    // Extract required state and actions from Zustand
     const { nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges } = useStore(selector);
 
-    // Access ReactFlow instance from within the Provider scope
+    // Hooks for React Flow instance and state guards
     const reactFlowInstance = useReactFlow();
+    const [isMounted, setIsMounted] = useState(false);
 
     const [prompt, setPrompt] = useState('');
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
 
-    // Mount State to manage Hydration/SSR issues
-    const [isMounted, setIsMounted] = useState(false);
-
-    // 1. DEFINITIVE FIX: Initial Data Logic (Runs ONLY on mount and map change)
+    // 1. DEFINITIVE FIX: Mount Guard and Initial Data Logic
     useEffect(() => {
-        // CRITICAL: Set mount flag and load data
+        // Set mount flag
         setIsMounted(true);
 
-        // Safely initialize state using initial data
+        // Safely initialize state using initial data passed via props
         if (initialData) {
             setNodes(initialData.nodes || []);
             setEdges(initialData.edges || []);
@@ -61,12 +59,11 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
             setEdges([]);
         }
 
-        // CRITICAL: The dependency array is limited to the props that force a re-load.
-        // We assume setNodes/setEdges (from Zustand) are stable enough for this pattern.
-        // If this fails, the issue is not fixable here and requires Next.js version rollback.
-    }, [mapId, initialData]);
+        // CRITICAL: Depend only on mapId. initialData is assumed to be immutable 
+        // for a given mapId load. This breaks the spurious dependency loop.
+    }, [mapId]);
 
-    // --- All other handlers (handleChat, handleSave, handleKeyPress) remain the same ---
+    // --- All other handlers remain the same ---
 
     const handleChat = async () => {
         if (!prompt.trim() || !isMounted) return;
@@ -108,15 +105,17 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
 
             // Monitor Functionality: Zoom to centerNodeId
             if (data.centerNodeId && reactFlowInstance) {
+                // Find the target node using the up-to-date nodes array
                 const targetNode = [...nodes, ...(data.nodes || [])].find((n: any) => n.id === data.centerNodeId);
 
                 if (targetNode && targetNode.position) {
+                    // Set center immediately as it's safe now that the component is mounted
                     reactFlowInstance.setCenter(targetNode.position.x, targetNode.position.y, { zoom: 1.5, duration: 1000 });
                 }
             }
 
         } catch (error) {
-            console.error(error);
+            console.error("Chat Error:", error);
             setChatHistory(prev => [...prev, {
                 role: 'assistant',
                 content: 'Sorry, I encountered an error processing your request.'
@@ -151,7 +150,7 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
                 }]);
             }
         } catch (error) {
-            console.error(error);
+            console.error("Save Error:", error);
             setChatHistory(prev => [...prev, {
                 role: 'assistant',
                 content: '✗ Failed to save. Please try again.'
