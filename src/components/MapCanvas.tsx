@@ -36,8 +36,9 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
     const { nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges } = useStore(selector);
 
     // --- CRITICAL FIX HOOKS ---
-    const reactFlowInstance = useReactFlow(); // Needs to be inside the Provider scope
-    const [isMounted, setIsMounted] = useState(false); // Mount Guard State
+    // Access ReactFlow instance from within the Provider scope
+    const reactFlowInstance = useReactFlow();
+    const [isMounted, setIsMounted] = useState(false);
     // --------------------------
 
     const [prompt, setPrompt] = useState('');
@@ -58,15 +59,18 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
             setNodes([]);
             setEdges([]);
         }
-    }, [initialData, setNodes, setEdges]); // Runs only on mount or mapId change
+
+        // IMPORTANT: The return value of this function must be clean up logic, 
+        // not logic that causes infinite re-renders.
+    }, [initialData, setNodes, setEdges]);
 
     const handleChat = async () => {
-        if (!prompt.trim() || !isMounted) return; // Guard against unmounted execution
+        if (!prompt.trim() || !isMounted) return;
 
         setLoading(true);
         setChatHistory(prev => [...prev, { role: 'user', content: prompt }]);
         const currentPrompt = prompt;
-        setPrompt(''); // Clear input early
+        setPrompt('');
 
         try {
             const res = await fetch('/api/chat', {
@@ -190,7 +194,7 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {chatHistory.length === 0 && (
                         <div className="text-center text-gray-400 mt-8">
-                            <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                            <div className="text-6xl mb-4">🧠</div>
                             <p className="text-sm">Start by describing what you want to map</p>
                             <p className="text-xs mt-2">Example: "AI and Machine Learning concepts"</p>
                         </div>
@@ -217,6 +221,7 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
                 <div className="p-4 border-t border-gray-200 bg-white">
                     <div className="flex gap-2 mb-3">
                         <Input
+                            // key prop is intentionally removed here as the Mount Guard handles the hydration mismatch
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyPress={handleKeyPress}
