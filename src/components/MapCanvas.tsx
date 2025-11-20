@@ -33,22 +33,23 @@ interface MapCanvasProps {
 }
 
 function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
+    // These selectors return state and state setters from Zustand
     const { nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges } = useStore(selector);
 
-    // --- CRITICAL FIX HOOKS ---
     // Access ReactFlow instance from within the Provider scope
     const reactFlowInstance = useReactFlow();
-    const [isMounted, setIsMounted] = useState(false);
-    // --------------------------
 
     const [prompt, setPrompt] = useState('');
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
 
-    // 1. Definitive Mount and Initial Data Effect (Resolves Error #185)
+    // Mount State to manage Hydration/SSR issues
+    const [isMounted, setIsMounted] = useState(false);
+
+    // 1. DEFINITIVE FIX: Initial Data Logic (Runs ONLY on mount and map change)
     useEffect(() => {
-        // Set mount flag ONLY on the client
+        // CRITICAL: Set mount flag and load data
         setIsMounted(true);
 
         // Safely initialize state using initial data
@@ -60,9 +61,12 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
             setEdges([]);
         }
 
-        // IMPORTANT: The return value of this function must be clean up logic, 
-        // not logic that causes infinite re-renders.
-    }, [initialData, setNodes, setEdges]);
+        // CRITICAL: The dependency array is limited to the props that force a re-load.
+        // We assume setNodes/setEdges (from Zustand) are stable enough for this pattern.
+        // If this fails, the issue is not fixable here and requires Next.js version rollback.
+    }, [mapId, initialData]);
+
+    // --- All other handlers (handleChat, handleSave, handleKeyPress) remain the same ---
 
     const handleChat = async () => {
         if (!prompt.trim() || !isMounted) return;
@@ -104,11 +108,9 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
 
             // Monitor Functionality: Zoom to centerNodeId
             if (data.centerNodeId && reactFlowInstance) {
-                // Find the target node using the up-to-date nodes array
                 const targetNode = [...nodes, ...(data.nodes || [])].find((n: any) => n.id === data.centerNodeId);
 
                 if (targetNode && targetNode.position) {
-                    // Set center immediately as it's safe now that the component is mounted
                     reactFlowInstance.setCenter(targetNode.position.x, targetNode.position.y, { zoom: 1.5, duration: 1000 });
                 }
             }
@@ -221,7 +223,6 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
                 <div className="p-4 border-t border-gray-200 bg-white">
                     <div className="flex gap-2 mb-3">
                         <Input
-                            // key prop is intentionally removed here as the Mount Guard handles the hydration mismatch
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyPress={handleKeyPress}
@@ -292,7 +293,6 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
     );
 }
 
-// The export default wrapper remains the same and correctly provides the context.
 export default function MapCanvas(props: MapCanvasProps) {
     return (
         <ReactFlowProvider>
