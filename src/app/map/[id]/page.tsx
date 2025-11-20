@@ -10,17 +10,24 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
     // Await params in Next.js 15
     const { id } = await params;
 
-    // Load existing map data if it exists
-    const existingMap = await prisma.mindMap.findUnique({
-        where: { id },
-    });
+    let initialData = { nodes: [], edges: [] };
 
-    // Parse map_data if it exists
-    const initialData = existingMap?.map_data
-        ? (typeof existingMap.map_data === 'string'
-            ? JSON.parse(existingMap.map_data)
-            : existingMap.map_data)
-        : { nodes: [], edges: [] };
+    try {
+        // Load existing map data if it exists
+        const existingMap = await prisma.mindMap.findUnique({
+            where: { id },
+        });
+
+        // Parse map_data if it exists
+        if (existingMap?.map_data) {
+            initialData = typeof existingMap.map_data === 'string'
+                ? JSON.parse(existingMap.map_data)
+                : existingMap.map_data;
+        }
+    } catch (error) {
+        console.error("Failed to load map data:", error);
+        // We continue with empty initialData to prevent page crash
+    }
 
     return <MapCanvas mapId={id} initialData={initialData} />;
 }
