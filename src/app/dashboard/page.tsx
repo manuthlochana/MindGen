@@ -1,27 +1,21 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import DashboardClient from "./DashboardClient";
 
 export default async function Dashboard() {
     const session = await auth();
     if (!session?.user?.id) redirect("/auth/signin");
 
-    // Find the most recently updated map
-    const latestMap = await prisma.mindMap.findFirst({
+    const maps = await prisma.mindMap.findMany({
         where: { userId: session.user.id },
         orderBy: { updatedAt: 'desc' },
+        select: {
+            id: true,
+            updatedAt: true,
+            // We don't need the full map_data for the list
+        }
     });
 
-    if (latestMap) {
-        redirect(`/map/${latestMap.id}`);
-    } else {
-        // Create a new map if none exists
-        const newMap = await prisma.mindMap.create({
-            data: {
-                userId: session.user.id,
-                map_data: { nodes: [], edges: [] },
-            },
-        });
-        redirect(`/map/${newMap.id}`);
-    }
+    return <DashboardClient userName={session.user.name || "User"} maps={maps} />;
 }

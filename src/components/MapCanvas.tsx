@@ -5,6 +5,8 @@ import ReactFlow, {
     Controls,
     Background,
     MiniMap,
+    ReactFlowProvider,
+    useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import useStore from '@/store/useStore';
@@ -30,8 +32,9 @@ interface MapCanvasProps {
     };
 }
 
-export default function MapCanvas({ mapId, initialData }: MapCanvasProps) {
+function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
     const { nodes, edges, onNodesChange, onEdgesChange, onConnect, setNodes, setEdges } = useStore(selector);
+    const { setCenter, getNodes } = useReactFlow();
     const [prompt, setPrompt] = useState('');
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -48,40 +51,70 @@ export default function MapCanvas({ mapId, initialData }: MapCanvasProps) {
         }
     }, [initialData, setNodes, setEdges]);
 
-    const handleGenerate = async () => {
+    const handleChat = async () => {
         if (!prompt.trim()) return;
 
         setLoading(true);
         setChatHistory(prev => [...prev, { role: 'user', content: prompt }]);
+        const currentPrompt = prompt;
+        setPrompt(''); // Clear input early
 
         try {
-            const res = await fetch('/api/generate-map', {
+            const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt }),
+                body: JSON.stringify({
+                    prompt: currentPrompt,
+                    mapId: mapId
+                }),
             });
 
-            const data = await res.json();
+            const response = await res.json();
+            const { intent, data } = response;
 
-            if (data.nodes) {
-                // Merge new nodes with existing ones
-                setNodes([...nodes, ...data.nodes]);
-                setEdges([...edges, ...data.edges]);
-
+            if (data.responseText) {
                 setChatHistory(prev => [...prev, {
                     role: 'assistant',
-                    content: `Generated ${data.nodes.length} nodes for "${prompt}"`
+                    content: data.responseText
                 }]);
             }
+
+            if (intent === "MIND_MAP" || intent === "STORE_MEMORY") {
+                if (data.nodes && data.nodes.length > 0) {
+                    // Merge new nodes (simple append for now, relying on unique IDs)
+                    // In a real app, we might check for duplicates
+                    const newNodes = data.nodes.filter((n: any) => !nodes.some((en: any) => en.id === n.id));
+                    const newEdges = data.edges.filter((e: any) => !edges.some((ee: any) => ee.id === e.id));
+
+                    setNodes([...nodes, ...newNodes]);
+                    setEdges([...edges, ...newEdges]);
+                }
+            }
+
+            // Monitor Functionality: Zoom to centerNodeId
+            if (data.centerNodeId) {
+                // We need to wait for state update to render nodes before we can center? 
+                // Or we can just center on the coordinates if we have them in data.nodes
+                // If the node is existing, we need to find it.
+
+                setTimeout(() => {
+                    const targetNode = data.nodes?.find((n: any) => n.id === data.centerNodeId)
+                        || getNodes().find(n => n.id === data.centerNodeId);
+
+                    if (targetNode) {
+                        setCenter(targetNode.position.x, targetNode.position.y, { zoom: 1.5, duration: 1000 });
+                    }
+                }, 100); // Small delay to allow React Flow to update
+            }
+
         } catch (error) {
             console.error(error);
             setChatHistory(prev => [...prev, {
                 role: 'assistant',
-                content: 'Failed to generate map. Please try again.'
+                content: 'Sorry, I encountered an error processing your request.'
             }]);
         } finally {
             setLoading(false);
-            setPrompt('');
         }
     };
 
@@ -122,7 +155,7 @@ export default function MapCanvas({ mapId, initialData }: MapCanvasProps) {
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            handleGenerate();
+            handleChat();
         }
     };
 
@@ -156,8 +189,8 @@ export default function MapCanvas({ mapId, initialData }: MapCanvasProps) {
                         >
                             <div
                                 className={`max-w-[80%] rounded-lg px-4 py-2 ${message.role === 'user'
-                                        ? 'bg-indigo-600 text-white'
-                                        : 'bg-gray-100 text-gray-800'
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-gray-100 text-gray-800'
                                     }`}
                             >
                                 <p className="text-sm">{message.content}</p>
@@ -173,12 +206,12 @@ export default function MapCanvas({ mapId, initialData }: MapCanvasProps) {
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyPress={handleKeyPress}
-                            placeholder="Describe what to map..."
+                            placeholder="Ask a question or describe a memory..."
                             className="flex-1"
                             disabled={loading}
                         />
                         <Button
-                            onClick={handleGenerate}
+                            onClick={handleChat}
                             disabled={loading || !prompt.trim()}
                             size="icon"
                         >
@@ -237,5 +270,13 @@ export default function MapCanvas({ mapId, initialData }: MapCanvasProps) {
                 )}
             </div>
         </div>
+    );
+}
+
+export default function MapCanvas(props: MapCanvasProps) {
+    return (
+        <ReactFlowProvider>
+            <MapCanvasContent {...props} />
+        </ReactFlowProvider>
     );
 }

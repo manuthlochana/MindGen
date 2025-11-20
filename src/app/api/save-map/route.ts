@@ -39,13 +39,7 @@ export const POST = auth(async (req) => {
             const embeddingResult = await embeddingModel.embedContent(concept);
             const vector = embeddingResult.embedding.values;
 
-            try {
-                await qdrant.getCollection("mindmaps");
-            } catch {
-                await qdrant.createCollection("mindmaps", {
-                    vectors: { size: 768, distance: "Cosine" },
-                });
-            }
+            // Collection "mindmaps" is assumed to exist
 
             await qdrant.upsert("mindmaps", {
                 points: [
