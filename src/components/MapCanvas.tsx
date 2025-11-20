@@ -203,6 +203,7 @@ function MapCanvasContent({ mapId, initialData }: MapCanvasProps) {
                 <div className="p-4 border-t border-gray-200 bg-white">
                     <div className="flex gap-2 mb-3">
                         <Input
+                            key={mapId}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyPress={handleKeyPress}
